@@ -1,0 +1,17 @@
+name = "PRICK"
+authors = ["Freddie Barter <fjbarter@outlook.com>"]
+uuid = "e89368bc-bc31-4f60-a9df-df669e2c49e6"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
+ImplicitBVH = "932a18dc-bb55-4cd5-bdd6-1368ec9cea29"
+MeshIO = "7269a6da-0436-5bbc-96c2-40638cbb6118"
+Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
+Packing3D = "5d0ed53d-9f2b-4cc0-9997-af7e4729d96d"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[sources]
+Packing3D = {url = "https://github.com/fjbarter/Packing3D.jl"}
