@@ -1,5 +1,4 @@
 using PRICK
-using GLMakie
 
 # ============================================================
 # example() demonstrating:
@@ -89,5 +88,5 @@ function example()
 end
 
 out = example()
-fig = visualise_trace(out.res; X=out.X, radii=out.radii, vessel_tm=out.vessel_tm)
-display(fig)
+# fig = visualise_trace(out.res; X=out.X, radii=out.radii, vessel_tm=out.vessel_tm)
+# display(fig)

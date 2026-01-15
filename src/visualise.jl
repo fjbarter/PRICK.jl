@@ -1,6 +1,5 @@
- # ============================================================
- # Visualisation utilities (optional)
- # ============================================================
+ # Optional visualisation utitilies using GLMakie
+ 
 function _glmakie()
     if isdefined(Main, :GLMakie)
         return getfield(Main, :GLMakie)
