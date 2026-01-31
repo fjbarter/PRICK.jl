@@ -194,3 +194,166 @@ function spheres_near_path_indices(X::AbstractMatrix{<:Real},
 
     return keep
 end
+
+
+
+function polyh_near_path_indices(pbvh::PolyhedralBVH,
+    path::Vector{SVector{3,Float64}};
+    margin::Float64=2e-3,
+    path_stride::Int=20)
+
+    N = length(pbvh.centres)
+    isempty(path) && return Int[]
+
+    # Downsample path points
+    idxs = 1:path_stride:length(path)
+    P = path[idxs]
+
+    # AABB cull (expanded by max radius + margin)
+    rmax = float(maximum(pbvh.radii))
+    mins, maxs = path_aabb(P)
+    mins = mins .- (rmax + margin)
+    maxs = maxs .+ (rmax + margin)
+
+    keep = Int[]
+    @inbounds for i in 1:N
+        c = pbvh.centres[i]
+        cx, cy, cz = c[1], c[2], c[3]
+
+        # quick AABB reject
+        if cx < mins[1] || cx > maxs[1] || cy < mins[2] || cy > maxs[2] || cz < mins[3] || cz > maxs[3]
+            continue
+        end
+
+        ri = float(pbvh.radii[i])
+        thresh2 = (ri + margin)^2
+
+        # distance to nearest sampled point (tube around polyline)
+        d2min = Inf
+        for p in P
+            dx = cx - p[1]
+            dy = cy - p[2]
+            dz = cz - p[3]
+            d2 = dx * dx + dy * dy + dz * dz
+            if d2 < d2min
+                d2min = d2
+                d2min < thresh2 && break
+            end
+        end
+
+        if d2min < thresh2
+            push!(keep, i)
+        end
+    end
+
+    return keep
+end
+
+function transform_mesh(tm::TriangleMesh, R::SMatrix{3,3,Float64,9}, scale::Float64, trans::SVector{3,Float64})
+    V = tm.vertices
+    C = tm.connectivity
+
+    # Create new points array
+    points = Vector{GeometryBasics.Point3f}(undef, size(V, 2))
+
+    @inbounds for i in 1:size(V, 2)
+        v = SVector(V[1, i], V[2, i], V[3, i])
+        # Apply transforms: Rotate -> Scale -> Translate
+        v_new = (R * v) * scale + trans
+        points[i] = GeometryBasics.Point3f(Float32(v_new[1]), Float32(v_new[2]), Float32(v_new[3]))
+    end
+
+    faces = [GeometryBasics.TriangleFace(Int(C[1, j]), Int(C[2, j]), Int(C[3, j]))
+             for j in 1:size(C, 2)]
+
+    return GeometryBasics.Mesh(points, faces)
+end
+
+function visualise_trace(res::RayTraceResult;
+    pbvh::PolyhedralBVH,
+    vessel_tm::Union{Nothing,TriangleMesh}=nothing,
+    show_vessel::Bool=true,
+    show_particles::Bool=true)
+
+    gm = _glmakie()
+    fig = gm.Figure()
+    ax = gm.Axis3(fig[1, 1], aspect=:data)
+
+    if show_vessel && vessel_tm !== nothing
+        m = to_geometrybasics_mesh(vessel_tm)
+        gm.mesh!(ax, m;
+            color=(:gray, 0.15),
+            transparency=true,
+            shading=gm.NoShading,
+        )
+    end
+
+    if show_particles
+        idxs = polyh_near_path_indices(pbvh, res.path; margin=2e-3, path_stride=20)
+        println("Plotting $(length(idxs)) / $(length(pbvh.centres)) particles near the ray")
+
+        if !isempty(idxs)
+            template_mesh = pbvh.polyh_mesh
+
+            # Pre-calculate total vertices/faces to allocate arrays once
+            nv_template = size(template_mesh.vertices, 2)
+            nf_template = size(template_mesh.connectivity, 2)
+            n_instances = length(idxs)
+
+            merged_vertices = Vector{GeometryBasics.Point3f}(undef, n_instances * nv_template)
+            merged_faces = Vector{GeometryBasics.TriangleFace{Int}}(undef, n_instances * nf_template)
+
+            @inbounds for (k, i) in enumerate(idxs)
+                c = pbvh.centres[i]
+                r = pbvh.radii[i]
+                sf = get_scale_factor(template_mesh, Float32(r))
+                orient = pbvh.orientations[i]
+
+                # Offsets for this instance
+                v_offset = (k - 1) * nv_template
+                f_offset = (k - 1) * nf_template
+
+                # Transform Vertices
+                for v_idx in 1:nv_template
+                    v = SVector(template_mesh.vertices[1, v_idx],
+                        template_mesh.vertices[2, v_idx],
+                        template_mesh.vertices[3, v_idx])
+
+                    v_new = (orient * v) * Float64(sf) + c
+
+                    merged_vertices[v_offset+v_idx] = GeometryBasics.Point3f(
+                        Float32(v_new[1]), Float32(v_new[2]), Float32(v_new[3])
+                    )
+                end
+
+                # Copy faces (re-indexed)
+                for f_idx in 1:nf_template
+                    f = template_mesh.connectivity[:, f_idx]
+                    merged_faces[f_offset+f_idx] = GeometryBasics.TriangleFace(
+                        Int(f[1]) + v_offset,
+                        Int(f[2]) + v_offset,
+                        Int(f[3]) + v_offset
+                    )
+                end
+            end
+
+            final_mesh = GeometryBasics.Mesh(merged_vertices, merged_faces)
+            gm.mesh!(ax, final_mesh, color=(:orange, 0.15), transparency=true)
+
+        end
+    end
+
+    if !isempty(res.path)
+        pts = [GeometryBasics.Point3f(Float32(p[1]), Float32(p[2]), Float32(p[3]))
+               for p in res.path]
+
+        gm.lines!(ax, pts;
+            linewidth=4,
+            overdraw=true,        # draw on top of everything
+        )
+        gm.scatter!(ax, [pts[1]]; markersize=12, color=:red, overdraw=true)
+        gm.scatter!(ax, [pts[end]]; markersize=12, color=:purple, overdraw=true)
+    end
+
+    return fig
+end
