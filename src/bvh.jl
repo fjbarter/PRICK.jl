@@ -22,6 +22,14 @@ struct SphereBVH
     radii::Vector{Float64}
 end
 
+struct PolyhedralBVH
+    bvh::BVH
+    centres::Vector{SVector{3,Float64}}
+    radii::Vector{Float64}
+    orientations::Vector{SMatrix{3,3,Float64,9}}
+    polyh_mesh::TriangleMesh
+end
+
 function build_mesh_bvh(tm::TriangleMesh)::MeshBVH
     V = tm.vertices
     C = tm.connectivity
@@ -128,4 +136,61 @@ function build_sphere_bvh(X::AbstractMatrix{<:Real}, r::AbstractVector{<:Real}):
 
     bvh = BVH(leaves, BBox{Float64})
     return SphereBVH(bvh, centres, radii)
+end
+
+
+function build_polyh_bvh(
+    polyh_mesh::TriangleMesh,
+    X::AbstractMatrix{<:Real},
+    r::AbstractVector{<:Real},
+    orients::AbstractMatrix{<:Real} # Assuming 3xN Euler angles
+)::PolyhedralBVH
+
+    @assert size(X, 1) == 3 "X must be 3xN"
+    n = size(X, 2)
+    @assert length(r) == n "r must have length N"
+    @assert size(orients, 1) == 3 "orients must be 3xN (Euler angles)"
+    @assert size(orients, 2) == n "orients must have N columns"
+
+    centres = Vector{SVector{3,Float64}}(undef, n)
+    radii = Vector{Float64}(undef, n)
+    orientations = Vector{SMatrix{3,3,Float64,9}}(undef, n)
+    leaves = Vector{BBox{Float64}}(undef, n)
+
+    # Pre-allocate bounds for loop efficiency
+    V_local = polyh_mesh.vertices
+    Nv = size(V_local, 2)
+
+    @inbounds for i in 1:n
+        c = SVector{3,Float64}(float(X[1, i]), float(X[2, i]), float(X[3, i]))
+        ri = float(r[i])
+
+        centres[i] = c
+        radii[i] = ri
+
+        # Compute and store global rotation matrix
+        r_mat = get_rotation_matrix(view(orients, :, i), units=u"°")
+        orientations[i] = r_mat
+        sf = get_scale_factor(polyh_mesh, Float32(ri))
+
+        # Initialize bounds with the first transformed vertex
+        v1 = SVector(V_local[1, 1], V_local[2, 1], V_local[3, 1])
+        v1_trans = (r_mat * v1) * sf + c
+
+        min_b = v1_trans
+        max_b = v1_trans
+
+        for k in 2:Nv
+            v = SVector(V_local[1, k], V_local[2, k], V_local[3, k])
+            v_trans = (r_mat * v) * sf + c
+
+            min_b = min.(min_b, v_trans)
+            max_b = max.(max_b, v_trans)
+        end
+
+        leaves[i] = BBox{Float64}(min_b, max_b)
+    end
+
+    bvh = BVH(leaves, BBox{Float64})
+    return PolyhedralBVH(bvh, centres, radii, orientations, polyh_mesh)
 end

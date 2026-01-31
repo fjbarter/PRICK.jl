@@ -31,9 +31,10 @@ export SVector, SMatrix
 # PRICK
 export TriangleMesh, TriangleSurface, Mirror, Sink
 export mirror, sink
-export build_sphere_bvh
+export build_sphere_bvh, build_polyh_bvh
 export trace_ray_geometric, RayTraceResult
 export visualise_trace
 export path_to_matrix
+export find_void_rrhc
 
 end # module PRICK
