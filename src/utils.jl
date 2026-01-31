@@ -29,3 +29,16 @@ function mean(values::AbstractVector{T}) where T <: Real
     end
     return s / length(values)
 end
+
+function stddev(values::AbstractVector{T}) where T<:Real
+    if length(values) < 2
+        return T <: AbstractFloat ? T(NaN) : throw(ArgumentError("stddev requires at least two elements"))
+    end
+    m = mean(values)
+    sumsq = zero(T)
+    @inbounds for v in values
+        diff = v - m
+        sumsq += diff * diff
+    end
+    return sqrt(sumsq / (length(values) - 1))
+end
