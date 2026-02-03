@@ -1,3 +1,4 @@
 Manifest.toml
-*.vtk
-*.stl
+**/*.vtk
+**/*.stl
+**/*.csv
