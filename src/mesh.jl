@@ -4,11 +4,16 @@
 struct TriangleMesh
     vertices::Matrix{Float64}     # (3, Nv) stored in metres
     connectivity::Matrix{Int32}   # (3, Nt)
-    volume::Float64               # Mesh volume (m^3); NaN if not computed
 end
 
-# Outer constructor to maintain backward compatibility
-TriangleMesh(v::Matrix{Float64}, c::Matrix{Int32}) = TriangleMesh(v, c, NaN)
+struct ParticleTriangleMesh
+    vertices::Matrix{Float64}     # (3, Nv) stored in metres
+    connectivity::Matrix{Int32}   # (3, Nt)
+    volume::Float64                # volume of the mesh in m^3
+end
+
+ParticleTriangleMesh(v::Matrix{Float64}, c::Matrix{Int32}) =
+    ParticleTriangleMesh(v, c, NaN)
 
 abstract type SurfaceKind end
 struct Mirror <: SurfaceKind end
@@ -17,14 +22,7 @@ struct Sink <: SurfaceKind end
 struct TriangleSurface{K<:SurfaceKind}
     mesh::TriangleMesh
     kind::K
-    volume::Float64
 end
-
-# default value for volume
-function TriangleSurface(mesh::TriangleMesh, kind::K) where {K<:SurfaceKind}
-    TriangleSurface{K}(mesh, kind, 0.0)
-end
-
 
 # Interpret a coordinate value `x` as having units `u_in` if it is unitless,
 # then convert to metres and return a Float64.
@@ -47,7 +45,7 @@ function convert_mesh(mesh::GeometryBasics.Mesh)
     Meshes.SimpleMesh(points, connectivities)
 end
 
-function TriangleMesh(mesh::Meshes.SimpleMesh; units=u"m", compute_volume::Bool=false)
+function TriangleMesh(mesh::Meshes.SimpleMesh; units=u"m")
     c = mesh.vertices
     V = Matrix{Float64}(undef, 3, size(c, 1))
 
@@ -66,39 +64,66 @@ function TriangleMesh(mesh::Meshes.SimpleMesh; units=u"m", compute_volume::Bool=
         C[3, ic] = Int32(iz)
     end
 
-    vol = NaN
-    if compute_volume
-        temp_vol = 0.0
-        # Compute signed volume of tetrahedrons formed by each triangle and the origin
-        @inbounds for i in 1:size(C, 2)
-            idx1 = C[1, i]
-            idx2 = C[2, i]
-            idx3 = C[3, i]
-
-            # Vertices
-            p1x, p1y, p1z = V[1, idx1], V[2, idx1], V[3, idx1]
-            p2x, p2y, p2z = V[1, idx2], V[2, idx2], V[3, idx2]
-            p3x, p3y, p3z = V[1, idx3], V[2, idx3], V[3, idx3]
-
-            # Cross product of p2 and p3 (p2 x p3)
-            cx = p2y * p3z - p2z * p3y
-            cy = p2z * p3x - p2x * p3z
-            cz = p2x * p3y - p2y * p3x
-
-            # Dot product with p1 (p1 . (p2 x p3))
-            temp_vol += p1x * cx + p1y * cy + p1z * cz
-        end
-        vol = abs(temp_vol) / 6.0
-    end
-
-    return TriangleMesh(V, C, vol)
+    return TriangleMesh(V, C)
 end
 
-TriangleMesh(mesh::GeometryBasics.Mesh; units=u"m", compute_volume::Bool=false) =
-    TriangleMesh(convert_mesh(mesh); units=units, compute_volume=compute_volume)
+function ParticleTriangleMesh(mesh::Meshes.SimpleMesh; units=u"m")
+    c = mesh.vertices
+    V = Matrix{Float64}(undef, 3, size(c, 1))
 
-TriangleMesh(filepath::AbstractString; units=u"m", compute_volume::Bool=false) =
-    TriangleMesh(convert_mesh(FileIO.load(filepath)); units=units, compute_volume=compute_volume)
+    @inbounds for (iv, xyz) in enumerate(c)
+        V[1, iv] = to_metres(xyz.coords.x, units)
+        V[2, iv] = to_metres(xyz.coords.y, units)
+        V[3, iv] = to_metres(xyz.coords.z, units)
+    end
+
+    f = mesh.topology.connec
+    C = Matrix{Int32}(undef, 3, size(f, 1))
+    @inbounds for (ic, tri) in enumerate(f)
+        ix, iy, iz = tri.indices
+        C[1, ic] = Int32(ix)
+        C[2, ic] = Int32(iy)
+        C[3, ic] = Int32(iz)
+    end
+
+    # Compute volume using divergence theorem
+    vol = 0.0
+    # Compute signed volume of tetrahedrons formed by each triangle and the origin
+    @inbounds for i in 1:size(C, 2)
+        idx1 = C[1, i]
+        idx2 = C[2, i]
+        idx3 = C[3, i]
+
+        # Vertices
+        p1x, p1y, p1z = V[1, idx1], V[2, idx1], V[3, idx1]
+        p2x, p2y, p2z = V[1, idx2], V[2, idx2], V[3, idx2]
+        p3x, p3y, p3z = V[1, idx3], V[2, idx3], V[3, idx3]
+
+        # Cross product of p2 and p3 (p2 x p3)
+        cx = p2y * p3z - p2z * p3y
+        cy = p2z * p3x - p2x * p3z
+        cz = p2x * p3y - p2y * p3x
+
+        # Dot product with p1 (p1 . (p2 x p3))
+        vol += p1x * cx + p1y * cy + p1z * cz
+    end
+
+    vol = abs(vol) / 6.0
+    return ParticleTriangleMesh(V, C, vol)
+end
+
+
+TriangleMesh(mesh::GeometryBasics.Mesh; units=u"m") =
+    TriangleMesh(convert_mesh(mesh); units=units)
+
+TriangleMesh(filepath::AbstractString; units=u"m") =
+    TriangleMesh(convert_mesh(FileIO.load(filepath)); units=units)
+
+ParticleTriangleMesh(mesh::GeometryBasics.Mesh; units=u"m") =
+    ParticleTriangleMesh(convert_mesh(mesh); units=units)
+
+ParticleTriangleMesh(filepath::AbstractString; units=u"m") =
+    ParticleTriangleMesh(convert_mesh(FileIO.load(filepath)); units=units)
 
 @inline function materialize_trianglemesh(mesh; units=u"m")
     mesh isa TriangleMesh && return mesh
@@ -219,7 +244,7 @@ function translation_matrix(X::AbstractMatrix{<:Real})
     return translations
 end
 
-function get_scale_factor(mesh::TriangleMesh, radius::Float32)::Float32
+function get_scale_factor(mesh::ParticleTriangleMesh, radius::Float64)::Float64
     mesh_vol = mesh.volume
     @assert !isnan(mesh_vol) "get_scale_factor: mesh volume is NaN; cannot compute scale factor"
     unit_sphere_vol = (4.0f0 / 3.0f0) * π * radius^3
