@@ -9,7 +9,7 @@ function example2()
     surfaces = [sink(container_tm)]
 
     # Load particle mesh
-    particle_tm = TriangleMesh("Particle.stl"; units=u"m", compute_volume=true)
+    particle_tm = ParticleTriangleMesh("Particle.stl"; units=u"m")
 
     # Load particle data
     # Expected columns: 
@@ -73,8 +73,8 @@ end
 out = example2()
 
 fig = visualise_trace(
-    out.res;
-    pbvh=out.particles,
+    out.res,
+    out.particles;
     vessel_tm=out.container,
     show_vessel=true,
     show_particles=false,
