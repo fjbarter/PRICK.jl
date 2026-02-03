@@ -27,18 +27,18 @@ struct PolyhedralBVH
     centres::Vector{SVector{3,Float64}}
     radii::Vector{Float64}
     orientations::Vector{SMatrix{3,3,Float64,9}}
-    polyh_mesh::TriangleMesh
+    polyh_mesh::ParticleTriangleMesh
 end
 
 function build_mesh_bvh(tm::TriangleMesh)::MeshBVH
     V = tm.vertices
     C = tm.connectivity
-    verts = [SVector{3,Float64}(V[1,i], V[2,i], V[3,i]) for i in 1:size(V,2)]
-    tris  = [(Int32(C[1,j]), Int32(C[2,j]), Int32(C[3,j])) for j in 1:size(C,2)]
+    verts = [SVector{3,Float64}(V[1, i], V[2, i], V[3, i]) for i in 1:size(V, 2)]
+    tris = [(Int32(C[1, j]), Int32(C[2, j]), Int32(C[3, j])) for j in 1:size(C, 2)]
 
     tri_centres = Vector{SVector{3,Float64}}(undef, length(tris))
-    tri_radii   = Vector{Float64}(undef, length(tris))
-    for (j,(i1,i2,i3)) in enumerate(tris)
+    tri_radii = Vector{Float64}(undef, length(tris))
+    for (j, (i1, i2, i3)) in enumerate(tris)
         v0, v1, v2 = verts[i1], verts[i2], verts[i3]
         c = (v0 + v1 + v2) / 3.0
         rtri = max(
@@ -49,7 +49,7 @@ function build_mesh_bvh(tm::TriangleMesh)::MeshBVH
             ),
         )
         tri_centres[j] = c
-        tri_radii[j]   = rtri
+        tri_radii[j] = rtri
     end
 
     leaves = [BSphere{Float64}(tri_centres[j], tri_radii[j]) for j in eachindex(tris)]
@@ -82,12 +82,12 @@ function build_surface_bvh(surfaces::AbstractVector{<:TriangleSurface})::Surface
         Nt = size(C, 2)
 
         @inbounds for i in 1:Nv
-            push!(verts, SVector{3,Float64}(V[1,i], V[2,i], V[3,i]))
+            push!(verts, SVector{3,Float64}(V[1, i], V[2, i], V[3, i]))
         end
 
         off = Int32(nverts_total)
         @inbounds for j in 1:Nt
-            push!(tris, (Int32(C[1,j]) + off, Int32(C[2,j]) + off, Int32(C[3,j]) + off))
+            push!(tris, (Int32(C[1, j]) + off, Int32(C[2, j]) + off, Int32(C[3, j]) + off))
             push!(kinds, surface.kind)
         end
 
@@ -95,8 +95,8 @@ function build_surface_bvh(surfaces::AbstractVector{<:TriangleSurface})::Surface
     end
 
     tri_centres = Vector{SVector{3,Float64}}(undef, length(tris))
-    tri_radii   = Vector{Float64}(undef, length(tris))
-    @inbounds for (j,(i1,i2,i3)) in enumerate(tris)
+    tri_radii = Vector{Float64}(undef, length(tris))
+    @inbounds for (j, (i1, i2, i3)) in enumerate(tris)
         v0, v1, v2 = verts[i1], verts[i2], verts[i3]
         c = (v0 + v1 + v2) / 3.0
         rtri = max(
@@ -107,7 +107,7 @@ function build_surface_bvh(surfaces::AbstractVector{<:TriangleSurface})::Surface
             ),
         )
         tri_centres[j] = c
-        tri_radii[j]   = rtri
+        tri_radii[j] = rtri
     end
 
     leaves = [BSphere{Float64}(tri_centres[j], tri_radii[j]) for j in eachindex(tris)]
@@ -118,20 +118,20 @@ end
 build_surface_bvh(surface::TriangleSurface)::SurfaceBVH = build_surface_bvh([surface])
 
 function build_sphere_bvh(X::AbstractMatrix{<:Real}, r::AbstractVector{<:Real})::SphereBVH
-    @assert size(X,1) == 3 "X must be 3xN"
-    n = size(X,2)
+    @assert size(X, 1) == 3 "X must be 3xN"
+    n = size(X, 2)
     @assert length(r) == n "r must have length N"
 
     centres = Vector{SVector{3,Float64}}(undef, n)
-    radii   = Vector{Float64}(undef, n)
-    leaves  = Vector{BSphere{Float64}}(undef, n)
+    radii = Vector{Float64}(undef, n)
+    leaves = Vector{BSphere{Float64}}(undef, n)
 
     @inbounds for i in 1:n
-        c = SVector{3,Float64}(float(X[1,i]), float(X[2,i]), float(X[3,i]))
+        c = SVector{3,Float64}(float(X[1, i]), float(X[2, i]), float(X[3, i]))
         ri = float(r[i])
         centres[i] = c
-        radii[i]   = ri
-        leaves[i]  = BSphere{Float64}(c, ri)  # tight bounding sphere
+        radii[i] = ri
+        leaves[i] = BSphere{Float64}(c, ri)  # tight bounding sphere
     end
 
     bvh = BVH(leaves, BBox{Float64})
@@ -140,7 +140,7 @@ end
 
 
 function build_polyh_bvh(
-    polyh_mesh::TriangleMesh,
+    polyh_mesh::ParticleTriangleMesh,
     X::AbstractMatrix{<:Real},
     r::AbstractVector{<:Real},
     orients::AbstractMatrix{<:Real} # Assuming 3xN Euler angles
@@ -171,7 +171,7 @@ function build_polyh_bvh(
         # Compute and store global rotation matrix
         r_mat = get_rotation_matrix(view(orients, :, i), units=u"°")
         orientations[i] = r_mat
-        sf = get_scale_factor(polyh_mesh, Float32(ri))
+        sf = get_scale_factor(polyh_mesh, Float64(ri))
 
         # Initialize bounds with the first transformed vertex
         v1 = SVector(V_local[1, 1], V_local[2, 1], V_local[3, 1])
