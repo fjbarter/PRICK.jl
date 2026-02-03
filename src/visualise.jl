@@ -1,5 +1,5 @@
- # Optional visualisation utitilies using GLMakie
- 
+# Optional visualisation utitilies using GLMakie
+
 function _glmakie()
     if isdefined(Main, :GLMakie)
         return getfield(Main, :GLMakie)
@@ -10,9 +10,9 @@ function path_to_matrix(path::Vector{SVector{3,Float64}})
     K = length(path)
     M = Matrix{Float64}(undef, 3, K)
     @inbounds for k in 1:K
-        M[1,k] = path[k][1]
-        M[2,k] = path[k][2]
-        M[3,k] = path[k][3]
+        M[1, k] = path[k][1]
+        M[2, k] = path[k][2]
+        M[3, k] = path[k][3]
     end
     return M
 end
@@ -22,10 +22,10 @@ function to_geometrybasics_mesh(tm::TriangleMesh)
     V = tm.vertices
     C = tm.connectivity
 
-    points = [GeometryBasics.Point3f(Float32(V[1,i]), Float32(V[2,i]), Float32(V[3,i]))
-              for i in 1:size(V,2)]
-    faces  = [GeometryBasics.TriangleFace(Int(C[1,j]), Int(C[2,j]), Int(C[3,j]))
-              for j in 1:size(C,2)]
+    points = [GeometryBasics.Point3f(Float32(V[1, i]), Float32(V[2, i]), Float32(V[3, i]))
+              for i in 1:size(V, 2)]
+    faces = [GeometryBasics.TriangleFace(Int(C[1, j]), Int(C[2, j]), Int(C[3, j]))
+             for j in 1:size(C, 2)]
 
     return GeometryBasics.Mesh(points, faces)
 end
@@ -33,19 +33,20 @@ end
 # Make a sphere surface mesh centred at `c` with radius `r`
 function sphere_mesh(c::NTuple{3,Float32}, r::Float32; nθ::Int=24, nϕ::Int=16)
     cx, cy, cz = c
-    θs = range(0f0, 2f0*pi, length=nθ)
-    ϕs = range(0f0, pi,      length=nϕ)
+    θs = range(0f0, 2f0 * pi, length=nθ)
+    ϕs = range(0f0, pi, length=nϕ)
 
-    pts = Vector{GeometryBasics.Point3f}(undef, nθ*nϕ)
+    pts = Vector{GeometryBasics.Point3f}(undef, nθ * nϕ)
     @inbounds for j in 1:nϕ
         ϕ = ϕs[j]
-        sϕ = sin(ϕ); cϕ = cos(ϕ)
+        sϕ = sin(ϕ)
+        cϕ = cos(ϕ)
         for i in 1:nθ
             θ = θs[i]
             x = cx + r * (cos(θ) * sϕ)
             y = cy + r * (sin(θ) * sϕ)
             z = cz + r * (cϕ)
-            pts[(j-1)*nθ + i] = GeometryBasics.Point3f(x, y, z)
+            pts[(j-1)*nθ+i] = GeometryBasics.Point3f(x, y, z)
         end
     end
 
@@ -53,18 +54,18 @@ function sphere_mesh(c::NTuple{3,Float32}, r::Float32; nθ::Int=24, nϕ::Int=16)
     faces = GeometryBasics.TriangleFace{Int}[]
     @inbounds for j in 1:(nϕ-1)
         for i in 1:(nθ-1)
-            a = (j-1)*nθ + i
+            a = (j - 1) * nθ + i
             b = a + 1
-            c_ = j*nθ + i
+            c_ = j * nθ + i
             d = c_ + 1
             push!(faces, GeometryBasics.TriangleFace(a, c_, b))
             push!(faces, GeometryBasics.TriangleFace(b, c_, d))
         end
         # wrap seam at θ = 2π
-        a = (j-1)*nθ + nθ
-        b = (j-1)*nθ + 1
-        c_ = j*nθ + nθ
-        d = j*nθ + 1
+        a = (j - 1) * nθ + nθ
+        b = (j - 1) * nθ + 1
+        c_ = j * nθ + nθ
+        d = j * nθ + 1
         push!(faces, GeometryBasics.TriangleFace(a, c_, b))
         push!(faces, GeometryBasics.TriangleFace(b, c_, d))
     end
@@ -73,23 +74,23 @@ function sphere_mesh(c::NTuple{3,Float32}, r::Float32; nθ::Int=24, nϕ::Int=16)
 end
 
 function visualise_trace(res::RayTraceResult;
-                         X::AbstractMatrix,
-                         radii::AbstractVector,
-                         vessel_tm::Union{Nothing,TriangleMesh}=nothing,
-                         sphere_res::Int=20,
-                         show_vessel::Bool=true,
-                         show_spheres::Bool=true)
+    X::AbstractMatrix,
+    radii::AbstractVector,
+    vessel_tm::Union{Nothing,TriangleMesh}=nothing,
+    sphere_res::Int=20,
+    show_vessel::Bool=true,
+    show_spheres::Bool=true)
     gm = _glmakie()
     fig = gm.Figure()
-    ax = gm.Axis3(fig[1,1], aspect=:data)
+    ax = gm.Axis3(fig[1, 1], aspect=:data)
 
     # --- vessel ---
     if show_vessel && vessel_tm !== nothing
         m = to_geometrybasics_mesh(vessel_tm)
         gm.mesh!(ax, m;
-            color = (:gray, 0.15),
-            transparency = true,
-            shading = gm.NoShading,
+            color=(:gray, 0.15),
+            transparency=true,
+            shading=gm.NoShading,
         )
     end
 
@@ -100,23 +101,23 @@ function visualise_trace(res::RayTraceResult;
         println("Plotting $(length(idxs)) / $(size(X,2)) spheres near the ray")
 
         for i in idxs
-            c = (Float32(X[1,i]), Float32(X[2,i]), Float32(X[3,i]))
+            c = (Float32(X[1, i]), Float32(X[2, i]), Float32(X[3, i]))
             r = Float32(radii[i])
             sm = sphere_mesh(c, r; nθ=sphere_res, nϕ=max(8, sphere_res ÷ 2))
-            gm.mesh!(ax, sm, color = (:dodgerblue, 0.1))
+            gm.mesh!(ax, sm, color=(:dodgerblue, 0.1))
         end
     end
 
     # --- path ---
     if !isempty(res.path)
         pts = [GeometryBasics.Point3f(Float32(p[1]), Float32(p[2]), Float32(p[3]))
-            for p in res.path]
+               for p in res.path]
 
         gm.lines!(ax, pts;
-            linewidth = 4,
-            overdraw = true,        # draw on top of everything
+            linewidth=4,
+            overdraw=true,        # draw on top of everything
         )
-        gm.scatter!(ax, [pts[1]];  markersize=12, color=:red,    overdraw=true)
+        gm.scatter!(ax, [pts[1]]; markersize=12, color=:red, overdraw=true)
         gm.scatter!(ax, [pts[end]]; markersize=12, color=:purple, overdraw=true)
     end
 
@@ -127,31 +128,48 @@ end
 # AABB of a set of points (Vector{SVector{3,Float64}})
 function path_aabb(path::Vector{SVector{3,Float64}})
     p0 = path[1]
-    minx = p0[1]; maxx = p0[1]
-    miny = p0[2]; maxy = p0[2]
-    minz = p0[3]; maxz = p0[3]
+    minx = p0[1]
+    maxx = p0[1]
+    miny = p0[2]
+    maxy = p0[2]
+    minz = p0[3]
+    maxz = p0[3]
     @inbounds for i in 2:length(path)
         p = path[i]
-        x=p[1]; y=p[2]; z=p[3]
-        if x < minx; minx = x; end
-        if x > maxx; maxx = x; end
-        if y < miny; miny = y; end
-        if y > maxy; maxy = y; end
-        if z < minz; minz = z; end
-        if z > maxz; maxz = z; end
+        x = p[1]
+        y = p[2]
+        z = p[3]
+        if x < minx
+            minx = x
+        end
+        if x > maxx
+            maxx = x
+        end
+        if y < miny
+            miny = y
+        end
+        if y > maxy
+            maxy = y
+        end
+        if z < minz
+            minz = z
+        end
+        if z > maxz
+            maxz = z
+        end
     end
-    return (SVector{3,Float64}(minx,miny,minz), SVector{3,Float64}(maxx,maxy,maxz))
+    return (SVector{3,Float64}(minx, miny, minz), SVector{3,Float64}(maxx, maxy, maxz))
 end
 
 # Return indices of spheres whose centres come within (radius + margin) of any sampled path point.
 function spheres_near_path_indices(X::AbstractMatrix{<:Real},
-                                  radii::AbstractVector{<:Real},
-                                  path::Vector{SVector{3,Float64}};
-                                  margin::Float64 = 2e-3,
-                                  path_stride::Int = 20)
+    radii::AbstractVector{<:Real},
+    path::Vector{SVector{3,Float64}};
+    margin::Float64=2e-3,
+    path_stride::Int=20)
 
-    N = size(X,2)
-    @assert size(X,1) == 3
+    N = size(X, 2)
+    @assert size(X, 1) == 3
     @assert length(radii) == N
     isempty(path) && return Int[]
 
@@ -167,7 +185,9 @@ function spheres_near_path_indices(X::AbstractMatrix{<:Real},
 
     keep = Int[]
     @inbounds for i in 1:N
-        cx = float(X[1,i]); cy = float(X[2,i]); cz = float(X[3,i])
+        cx = float(X[1, i])
+        cy = float(X[2, i])
+        cz = float(X[3, i])
         # quick AABB reject
         if cx < mins[1] || cx > maxs[1] || cy < mins[2] || cy > maxs[2] || cz < mins[3] || cz > maxs[3]
             continue
@@ -179,8 +199,10 @@ function spheres_near_path_indices(X::AbstractMatrix{<:Real},
         # distance to nearest sampled point (tube around polyline)
         d2min = Inf
         for p in P
-            dx = cx - p[1]; dy = cy - p[2]; dz = cz - p[3]
-            d2 = dx*dx + dy*dy + dz*dz
+            dx = cx - p[1]
+            dy = cy - p[2]
+            dz = cz - p[3]
+            d2 = dx * dx + dy * dy + dz * dz
             if d2 < d2min
                 d2min = d2
                 d2min < thresh2 && break
@@ -193,4 +215,169 @@ function spheres_near_path_indices(X::AbstractMatrix{<:Real},
     end
 
     return keep
+end
+
+
+
+function polyh_near_path_indices(pbvh::PolyhedralBVH,
+    path::Vector{SVector{3,Float64}};
+    margin::Float64=2e-3,
+    path_stride::Int=20)
+
+    N = length(pbvh.centres)
+    isempty(path) && return Int[]
+
+    # Downsample path points
+    idxs = 1:path_stride:length(path)
+    P = path[idxs]
+
+    # AABB cull (expanded by max radius + margin)
+    rmax = float(maximum(pbvh.radii))
+    mins, maxs = path_aabb(P)
+    mins = mins .- (rmax + margin)
+    maxs = maxs .+ (rmax + margin)
+
+    keep = Int[]
+    @inbounds for i in 1:N
+        c = pbvh.centres[i]
+        cx, cy, cz = c[1], c[2], c[3]
+
+        # quick AABB reject
+        if cx < mins[1] || cx > maxs[1] || cy < mins[2] || cy > maxs[2] || cz < mins[3] || cz > maxs[3]
+            continue
+        end
+
+        ri = float(pbvh.radii[i])
+        thresh2 = (ri + margin)^2
+
+        # distance to nearest sampled point (tube around polyline)
+        d2min = Inf
+        for p in P
+            dx = cx - p[1]
+            dy = cy - p[2]
+            dz = cz - p[3]
+            d2 = dx * dx + dy * dy + dz * dz
+            if d2 < d2min
+                d2min = d2
+                d2min < thresh2 && break
+            end
+        end
+
+        if d2min < thresh2
+            push!(keep, i)
+        end
+    end
+
+    return keep
+end
+
+function transform_mesh(tm::TriangleMesh, R::SMatrix{3,3,Float64,9}, scale::Float64, trans::SVector{3,Float64})
+    V = tm.vertices
+    C = tm.connectivity
+
+    # Create new points array
+    points = Vector{GeometryBasics.Point3f}(undef, size(V, 2))
+
+    @inbounds for i in 1:size(V, 2)
+        v = SVector(V[1, i], V[2, i], V[3, i])
+        # Apply transforms: Rotate -> Scale -> Translate
+        v_new = (R * v) * scale + trans
+        points[i] = GeometryBasics.Point3f(Float32(v_new[1]), Float32(v_new[2]), Float32(v_new[3]))
+    end
+
+    faces = [GeometryBasics.TriangleFace(Int(C[1, j]), Int(C[2, j]), Int(C[3, j]))
+             for j in 1:size(C, 2)]
+
+    return GeometryBasics.Mesh(points, faces)
+end
+
+function visualise_trace(
+    res::RayTraceResult,
+    pbvh::PolyhedralBVH;
+    vessel_tm::Union{Nothing,TriangleMesh}=nothing,
+    show_vessel::Bool=true,
+    show_particles::Bool=true
+)
+
+    gm = _glmakie()
+    fig = gm.Figure()
+    ax = gm.Axis3(fig[1, 1], aspect=:data)
+
+    if show_vessel && vessel_tm !== nothing
+        m = to_geometrybasics_mesh(vessel_tm)
+        gm.mesh!(ax, m;
+            color=(:gray, 0.15),
+            transparency=true,
+            shading=gm.NoShading,
+        )
+    end
+
+    if show_particles
+        idxs = polyh_near_path_indices(pbvh, res.path; margin=2e-3, path_stride=20)
+        println("Plotting $(length(idxs)) / $(length(pbvh.centres)) particles near the ray")
+
+        if !isempty(idxs)
+            template_mesh = pbvh.polyh_mesh
+
+            # Pre-calculate total vertices/faces to allocate arrays once
+            nv_template = size(template_mesh.vertices, 2)
+            nf_template = size(template_mesh.connectivity, 2)
+            n_instances = length(idxs)
+
+            merged_vertices = Vector{GeometryBasics.Point3f}(undef, n_instances * nv_template)
+            merged_faces = Vector{GeometryBasics.TriangleFace{Int}}(undef, n_instances * nf_template)
+
+            @inbounds for (k, i) in enumerate(idxs)
+                c = pbvh.centres[i]
+                r = pbvh.radii[i]
+                sf = get_scale_factor(template_mesh, Float32(r))
+                orient = pbvh.orientations[i]
+
+                # Offsets for this instance
+                v_offset = (k - 1) * nv_template
+                f_offset = (k - 1) * nf_template
+
+                # Transform Vertices
+                for v_idx in 1:nv_template
+                    v = SVector(template_mesh.vertices[1, v_idx],
+                        template_mesh.vertices[2, v_idx],
+                        template_mesh.vertices[3, v_idx])
+
+                    v_new = (orient * v) * Float64(sf) + c
+
+                    merged_vertices[v_offset+v_idx] = GeometryBasics.Point3f(
+                        Float32(v_new[1]), Float32(v_new[2]), Float32(v_new[3])
+                    )
+                end
+
+                # Copy faces (re-indexed)
+                for f_idx in 1:nf_template
+                    f = template_mesh.connectivity[:, f_idx]
+                    merged_faces[f_offset+f_idx] = GeometryBasics.TriangleFace(
+                        Int(f[1]) + v_offset,
+                        Int(f[2]) + v_offset,
+                        Int(f[3]) + v_offset
+                    )
+                end
+            end
+
+            final_mesh = GeometryBasics.Mesh(merged_vertices, merged_faces)
+            gm.mesh!(ax, final_mesh, color=(:orange, 0.15), transparency=true)
+
+        end
+    end
+
+    if !isempty(res.path)
+        pts = [GeometryBasics.Point3f(Float32(p[1]), Float32(p[2]), Float32(p[3]))
+               for p in res.path]
+
+        gm.lines!(ax, pts;
+            linewidth=4,
+            overdraw=true,        # draw on top of everything
+        )
+        gm.scatter!(ax, [pts[1]]; markersize=12, color=:red, overdraw=true)
+        gm.scatter!(ax, [pts[end]]; markersize=12, color=:purple, overdraw=true)
+    end
+
+    return fig
 end
