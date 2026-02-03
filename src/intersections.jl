@@ -1,16 +1,18 @@
 # ============================================================
 # Ray/geometry intersections
 # ============================================================
-function ray_triangle_intersect(p::SVector{3,Float64},
-                                d::SVector{3,Float64},
-                                v0::SVector{3,Float64},
-                                v1::SVector{3,Float64},
-                                v2::SVector{3,Float64};
-                                eps=1e-12)
+function ray_triangle_intersect(
+    p::SVector{3,Float64},
+    d::SVector{3,Float64},
+    v0::SVector{3,Float64},
+    v1::SVector{3,Float64},
+    v2::SVector{3,Float64};
+    eps=1e-12
+)
     e1 = v1 - v0
     e2 = v2 - v0
-    h  = cross3(d, e2)
-    a  = dot3(e1, h)
+    h = cross3(d, e2)
+    a = dot3(e1, h)
     if abs(a) < eps
         return nothing
     end
@@ -30,9 +32,9 @@ function ray_triangle_intersect(p::SVector{3,Float64},
 end
 
 function nearest_surface_hit(p::SVector{3,Float64},
-                             d::SVector{3,Float64},
-                             surface::SurfaceBVH;
-                             eps=1e-12)
+    d::SVector{3,Float64},
+    surface::SurfaceBVH;
+    eps=1e-12)
     P = to_mat3x1(p)
     D = to_mat3x1(d)
     trav = traverse_rays(surface.bvh, P, D)
@@ -64,16 +66,18 @@ function nearest_surface_hit(p::SVector{3,Float64},
     return (tmin, imin, n, kind)
 end
 
-@inline function ray_sphere_exit_distance(p::SVector{3,Float64},
-                                          d::SVector{3,Float64},
-                                          c::SVector{3,Float64},
-                                          r::Float64;
-                                          eps=1e-12)
+@inline function ray_sphere_exit_distance(
+    p::SVector{3,Float64},
+    d::SVector{3,Float64},
+    c::SVector{3,Float64},
+    r::Float64;
+    eps=1e-12
+)
     # Assumes d is unit. Returns the forward distance to exit the sphere.
     m = p - c
     b = dot3(m, d)
-    c0 = dot3(m, m) - r*r
-    disc = b*b - c0
+    c0 = dot3(m, m) - r * r
+    disc = b * b - c0
     if disc < 0.0
         return nothing
     end
@@ -82,11 +86,13 @@ end
     return t_exit > eps ? t_exit : nothing
 end
 
-function ray_aabb_intersect(p::SVector{3,Float64},
-                            d::SVector{3,Float64},
-                            mins::SVector{3,Float64},
-                            maxs::SVector{3,Float64};
-                            eps=1e-12)
+function ray_aabb_intersect(
+    p::SVector{3,Float64},
+    d::SVector{3,Float64},
+    mins::SVector{3,Float64},
+    maxs::SVector{3,Float64};
+    eps=1e-12
+)
     tmin = -Inf
     tmax = Inf
     @inbounds for k in 1:3
@@ -114,16 +120,18 @@ function ray_aabb_intersect(p::SVector{3,Float64},
     return t > eps ? t : nothing
 end
 
-@inline function ray_sphere_intersect(p::SVector{3,Float64},
-                                      d::SVector{3,Float64},
-                                      c::SVector{3,Float64},
-                                      r::Float64;
-                                      eps=1e-12)
+@inline function ray_sphere_intersect(
+    p::SVector{3,Float64},
+    d::SVector{3,Float64},
+    c::SVector{3,Float64},
+    r::Float64;
+    eps=1e-12
+)
     # Solve ||p + t d - c||^2 = r^2
     m = p - c
     b = dot3(m, d)
-    c0 = dot3(m, m) - r*r
-    disc = b*b - c0
+    c0 = dot3(m, m) - r * r
+    disc = b * b - c0
     if disc < 0.0
         return nothing
     end
@@ -136,10 +144,12 @@ end
     return t2 > eps ? t2 : nothing
 end
 
-function nearest_sphere_hit(p::SVector{3,Float64},
-                            d::SVector{3,Float64},
-                            sbvh::SphereBVH;
-                            eps=1e-12)
+function nearest_sphere_hit(
+    p::SVector{3,Float64},
+    d::SVector{3,Float64},
+    sbvh::SphereBVH;
+    eps=1e-12
+)
     P = to_mat3x1(p)
     D = to_mat3x1(d)
     trav = traverse_rays(sbvh.bvh, P, D)
@@ -162,13 +172,15 @@ function nearest_sphere_hit(p::SVector{3,Float64},
 end
 
 
-function ray_polyh_intersect(p::SVector{3,Float64},
+function ray_polyh_intersect(
+    p::SVector{3,Float64},
     d::SVector{3,Float64},
     center::SVector{3,Float64},
     orient::SMatrix{3,3,Float64,9},
     scale::Float64,
-    template_mesh::TriangleMesh;
-    eps=1e-12)
+    template_mesh::ParticleTriangleMesh;
+    eps=1e-12
+)
 
     # Transform global ray to local object space
     # p_local = (1/s) * R' * (p - c)
@@ -215,10 +227,12 @@ function ray_polyh_intersect(p::SVector{3,Float64},
     end
 end
 
-function nearest_polyh_hit(p::SVector{3,Float64},
+function nearest_polyh_hit(
+    p::SVector{3,Float64},
     d::SVector{3,Float64},
     pbvh::PolyhedralBVH;
-    eps=1e-12)
+    eps=1e-12
+)
     P = to_mat3x1(p)
     D = to_mat3x1(d)
 
@@ -237,7 +251,7 @@ function nearest_polyh_hit(p::SVector{3,Float64},
         r = pbvh.radii[leaf_idx]
         orient = pbvh.orientations[leaf_idx]
 
-        sf = get_scale_factor(template, Float32(r))
+        sf = get_scale_factor(template, Float64(r))
         res = ray_polyh_intersect(p, d, c, orient, Float64(sf), template; eps=eps / sf)
 
         if res !== nothing
