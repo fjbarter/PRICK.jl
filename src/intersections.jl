@@ -178,7 +178,7 @@ function ray_polyh_intersect(
     center::SVector{3,Float64},
     orient::SMatrix{3,3,Float64,9},
     scale::Float64,
-    template_mesh::ParticleTriangleMesh;
+    template_bvh::MeshBVH;
     eps=1e-12
 )
 
@@ -189,20 +189,19 @@ function ray_polyh_intersect(
     p_local = (orient' * p_rel) * (1.0 / scale)
     d_local = orient' * d
 
-    # Intersect with template mesh in local space
-    V = template_mesh.vertices
-    C = template_mesh.connectivity
+    # BVH-accelerated intersection with template mesh in local space
+    P_local = to_mat3x1(p_local)
+    D_local = to_mat3x1(d_local)
+    trav = traverse_rays(template_bvh.bvh, P_local, D_local)
 
     tmin_local = Inf
     hit_found = false
     n_local_min = SVector{3,Float64}(0, 0, 0)
 
-    # Brute force check against all template triangles
-    for i in 1:size(C, 2)
-        idx1, idx2, idx3 = C[1, i], C[2, i], C[3, i]
-        v0 = SVector(V[1, idx1], V[2, idx1], V[3, idx1])
-        v1 = SVector(V[1, idx2], V[2, idx2], V[3, idx2])
-        v2 = SVector(V[1, idx3], V[2, idx3], V[3, idx3])
+    @inbounds for (leaf_idx, ray_idx) in trav.contacts
+        ray_idx == 1 || continue
+        i1, i2, i3 = template_bvh.tris[leaf_idx]
+        v0, v1, v2 = template_bvh.verts[i1], template_bvh.verts[i2], template_bvh.verts[i3]
 
         t_loc = ray_triangle_intersect(p_local, d_local, v0, v1, v2; eps=eps)
         if t_loc !== nothing && t_loc < tmin_local
@@ -242,7 +241,7 @@ function nearest_polyh_hit(
     imin = 0
     nmin = SVector{3,Float64}(0, 0, 0)
 
-    template = pbvh.polyh_mesh
+    template = pbvh.template_bvh
 
     @inbounds for (leaf_idx, ray_idx) in trav.contacts
         ray_idx == 1 || continue

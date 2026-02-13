@@ -29,9 +29,37 @@ struct PolyhedralBVH
     scale_factors::Vector{Float64}
     orientations::Vector{SMatrix{3,3,Float64,9}}
     polyh_mesh::ParticleTriangleMesh
+    template_bvh::MeshBVH
 end
 
 function build_mesh_bvh(tm::TriangleMesh)::MeshBVH
+    V = tm.vertices
+    C = tm.connectivity
+    verts = [SVector{3,Float64}(V[1, i], V[2, i], V[3, i]) for i in 1:size(V, 2)]
+    tris = [(Int32(C[1, j]), Int32(C[2, j]), Int32(C[3, j])) for j in 1:size(C, 2)]
+
+    tri_centres = Vector{SVector{3,Float64}}(undef, length(tris))
+    tri_radii = Vector{Float64}(undef, length(tris))
+    for (j, (i1, i2, i3)) in enumerate(tris)
+        v0, v1, v2 = verts[i1], verts[i2], verts[i3]
+        c = (v0 + v1 + v2) / 3.0
+        rtri = max(
+            sqrt(dot3(c - v0, c - v0)),
+            max(
+                sqrt(dot3(c - v1, c - v1)),
+                sqrt(dot3(c - v2, c - v2)),
+            ),
+        )
+        tri_centres[j] = c
+        tri_radii[j] = rtri
+    end
+
+    leaves = [BSphere{Float64}(tri_centres[j], tri_radii[j]) for j in eachindex(tris)]
+    bvh = BVH(leaves, BBox{Float64})
+    MeshBVH(bvh, verts, tris)
+end
+
+function build_mesh_bvh(tm::ParticleTriangleMesh)::MeshBVH
     V = tm.vertices
     C = tm.connectivity
     verts = [SVector{3,Float64}(V[1, i], V[2, i], V[3, i]) for i in 1:size(V, 2)]
@@ -195,5 +223,6 @@ function build_polyh_bvh(
     end
 
     bvh = BVH(leaves, BBox{Float64})
-    return PolyhedralBVH(bvh, centres, radii, scale_factors, orientations, polyh_mesh)
+    tbvh = build_mesh_bvh(polyh_mesh)
+    return PolyhedralBVH(bvh, centres, radii, scale_factors, orientations, polyh_mesh, tbvh)
 end
