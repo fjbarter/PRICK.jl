@@ -248,10 +248,9 @@ function nearest_polyh_hit(
         ray_idx == 1 || continue
 
         c = pbvh.centres[leaf_idx]
-        r = pbvh.radii[leaf_idx]
         orient = pbvh.orientations[leaf_idx]
+        sf = pbvh.scale_factors[leaf_idx]
 
-        sf = get_scale_factor(template, Float64(r))
         res = ray_polyh_intersect(p, d, c, orient, Float64(sf), template; eps=eps / sf)
 
         if res !== nothing

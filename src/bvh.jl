@@ -26,6 +26,7 @@ struct PolyhedralBVH
     bvh::BVH
     centres::Vector{SVector{3,Float64}}
     radii::Vector{Float64}
+    scale_factors::Vector{Float64}
     orientations::Vector{SMatrix{3,3,Float64,9}}
     polyh_mesh::ParticleTriangleMesh
 end
@@ -154,6 +155,7 @@ function build_polyh_bvh(
 
     centres = Vector{SVector{3,Float64}}(undef, n)
     radii = Vector{Float64}(undef, n)
+    scale_factors = Vector{Float64}(undef, n)
     orientations = Vector{SMatrix{3,3,Float64,9}}(undef, n)
     leaves = Vector{BBox{Float64}}(undef, n)
 
@@ -172,6 +174,7 @@ function build_polyh_bvh(
         r_mat = get_rotation_matrix(view(orients, :, i), units=u"°")
         orientations[i] = r_mat
         sf = get_scale_factor(polyh_mesh, Float64(ri))
+        scale_factors[i] = sf
 
         # Initialize bounds with the first transformed vertex
         v1 = SVector(V_local[1, 1], V_local[2, 1], V_local[3, 1])
@@ -192,5 +195,5 @@ function build_polyh_bvh(
     end
 
     bvh = BVH(leaves, BBox{Float64})
-    return PolyhedralBVH(bvh, centres, radii, orientations, polyh_mesh)
+    return PolyhedralBVH(bvh, centres, radii, scale_factors, orientations, polyh_mesh)
 end
