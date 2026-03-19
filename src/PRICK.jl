@@ -3,7 +3,9 @@
 module PRICK
 
 using StaticArrays
-import ImplicitBVH: BVH, BBox, BSphere, traverse_rays
+using ImplicitBVH
+import ImplicitBVH: BVH, BBox, BSphere
+import AcceleratedKernels as AK
 
 using Meshes
 using FileIO               # FileIO.load
@@ -15,6 +17,8 @@ using Unitful: ustrip, uconvert, m, @u_str
 include("utils.jl")
 include("mesh.jl")
 include("bvh.jl")
+include("ray_batch.jl")
+include("raytrace_active_lvt.jl")
 include("intersections.jl")
 include("tracer.jl")
 include("visualise.jl")
@@ -25,14 +29,11 @@ export @u_str
 # Packing3D
 export read_vtk_file, retrieve_coordinates
 
-# StaticArrays
-export SVector, SMatrix
-
 # PRICK
 export TriangleMesh, TriangleSurface, ParticleTriangleMesh, Mirror, Sink
 export mirror, sink
-export build_sphere_bvh, build_polyh_bvh
-export trace_ray_geometric, RayTraceResult
+export build_sphere_bvh, build_polyh_bvh, build_surface_bvh
+export trace_rays, RayTraceBatchResult, RayTermination
 export visualise_trace
 export path_to_matrix
 export find_void_rrhc

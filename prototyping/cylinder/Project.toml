@@ -1,3 +1,4 @@
 [deps]
-GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+PProf = "e4faabce-9ead-11e9-39d9-4379958e3056"
 PRICK = "e89368bc-bc31-4f60-a9df-df669e2c49e6"

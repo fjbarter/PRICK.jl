@@ -2,3 +2,5 @@ Manifest.toml
 **/*.vtk
 **/*.stl
 **/*.csv
+**/*.txt
+**/*.gz

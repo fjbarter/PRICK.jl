@@ -10,13 +10,14 @@ using Pkg
 Pkg.develop(url="https://github.com/fjbarter/PRICK.jl")
 ```
 
-Then you can simply load in your sphere and triangle-wall data, define a start point and direction as SVectors, as below:
+Then you can load sphere and triangle-wall data, define one start point, and trace a batch of directions:
 ```julia
 using PRICK
 
 # Load mesh and tag each surface as a mirror or a sink
 vessel_tm = TriangleMesh("RAMCylinder.stl"; units=u"m")
 surfaces = [mirror(vessel_tm)]  # or sink(vessel_tm)
+surface_bvh = build_surface_bvh(surfaces)  # build once and reuse
 
 # Load spheres (example using Packing3D VTK reader)
 data = read_vtk_file("particles_0.vtk")
@@ -27,24 +28,19 @@ radii = Float64.(r)
 # Build the spheres together and construct BVH
 spheres = build_sphere_bvh(X, radii)
 
-# Trace a ray
-p0 = SVector(0.0079, 0.0, 0.022)
-d = SVector(1.0, 0.0, 0.0)
-res = trace_ray_geometric(p0, d, surfaces, spheres)
-```
+# Trace N rays from a single start point p0 with a (3, N) direction matrix
+p0 = (0.0079, 0.0, 0.022)
+N = 10_000
+D = randn(3, N)  # directions are normalized internally
 
-## Visualisation (optional)
-
-`visualise_trace` requires GLMakie to be loaded by the user:
-
-```julia
-using GLMakie
-fig = visualise_trace(
-    res;
-    X=X, radii=radii,
-    vessel_tm=vessel_tm
+res = trace_rays(
+    p0,
+    D,
+    surface_bvh,
+    spheres;
+    max_bounces=20_000,
+    max_length=1e6,
 )
-display(fig)
 ```
 
 ## Notes
@@ -52,3 +48,4 @@ display(fig)
 - `mirror` surfaces reflect specularly.
 - `sink` surfaces terminate rays.
 - The union mesh bounding box is used as an unmeshed sink and is expanded by 10%.
+- Batched tracing returns per-ray `escaped`, `total_length`, `nsteps`, and `termination`.
