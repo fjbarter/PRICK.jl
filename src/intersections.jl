@@ -1,23 +1,23 @@
-# ============================================================
 # Ray/geometry intersections
 # ============================================================
-function ray_triangle_intersect(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    v0::SVector{3,Float64},
-    v1::SVector{3,Float64},
-    v2::SVector{3,Float64};
-    eps=1e-12
+
+@inline function ray_triangle_intersect(
+    p::NTuple{3,Float64},
+    d::NTuple{3,Float64},
+    v0::NTuple{3,Float64},
+    v1::NTuple{3,Float64},
+    v2::NTuple{3,Float64};
+    eps::Float64=1e-12,
 )
-    e1 = v1 - v0
-    e2 = v2 - v0
+    e1 = sub3(v1, v0)
+    e2 = sub3(v2, v0)
     h = cross3(d, e2)
     a = dot3(e1, h)
     if abs(a) < eps
         return nothing
     end
     f = 1.0 / a
-    s = p - v0
+    s = sub3(p, v0)
     u = f * dot3(s, h)
     if (u < 0.0) || (u > 1.0)
         return nothing
@@ -31,50 +31,24 @@ function ray_triangle_intersect(
     return t > eps ? t : nothing
 end
 
-function nearest_surface_hit(p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    surface::SurfaceBVH;
-    eps=1e-12)
-    P = to_mat3x1(p)
-    D = to_mat3x1(d)
-    trav = traverse_rays(surface.bvh, P, D)
-
-    tmin = Inf
-    imin = 0
-
-    @inbounds for (leaf_idx, ray_idx) in trav.contacts
-        ray_idx == 1 || continue
-        i1, i2, i3 = surface.tris[leaf_idx]
-        v0, v1, v2 = surface.verts[i1], surface.verts[i2], surface.verts[i3]
-        t = ray_triangle_intersect(p, d, v0, v1, v2; eps=eps)
-        if t !== nothing && t < tmin
-            tmin = t
-            imin = leaf_idx
-        end
-    end
-
-    if imin == 0
-        return nothing
-    end
-
-    i1, i2, i3 = surface.tris[imin]
-    v0, v1, v2 = surface.verts[i1], surface.verts[i2], surface.verts[i3]
-    n = cross3(v1 - v0, v2 - v0)
-    invn = 1.0 / sqrt(dot3(n, n))
-    n = n * invn
-    kind = surface.kinds[imin]
-    return (tmin, imin, n, kind)
+@inline function triangle_unit_normal(
+    v0::NTuple{3,Float64},
+    v1::NTuple{3,Float64},
+    v2::NTuple{3,Float64},
+)
+    n = cross3(sub3(v1, v0), sub3(v2, v0))
+    invn = inv(sqrt(dot3(n, n)))
+    return mul3(n, invn)
 end
 
 @inline function ray_sphere_exit_distance(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    c::SVector{3,Float64},
+    p::NTuple{3,Float64},
+    d::NTuple{3,Float64},
+    c::NTuple{3,Float64},
     r::Float64;
-    eps=1e-12
+    eps::Float64=1e-12,
 )
-    # Assumes d is unit. Returns the forward distance to exit the sphere.
-    m = p - c
+    m = sub3(p, c)
     b = dot3(m, d)
     c0 = dot3(m, m) - r * r
     disc = b * b - c0
@@ -87,11 +61,11 @@ end
 end
 
 function ray_aabb_intersect(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    mins::SVector{3,Float64},
-    maxs::SVector{3,Float64};
-    eps=1e-12
+    p::NTuple{3,Float64},
+    d::NTuple{3,Float64},
+    mins::NTuple{3,Float64},
+    maxs::NTuple{3,Float64};
+    eps::Float64=1e-12,
 )
     tmin = -Inf
     tmax = Inf
@@ -121,14 +95,13 @@ function ray_aabb_intersect(
 end
 
 @inline function ray_sphere_intersect(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    c::SVector{3,Float64},
+    p::NTuple{3,Float64},
+    d::NTuple{3,Float64},
+    c::NTuple{3,Float64},
     r::Float64;
-    eps=1e-12
+    eps::Float64=1e-12,
 )
-    # Solve ||p + t d - c||^2 = r^2
-    m = p - c
+    m = sub3(p, c)
     b = dot3(m, d)
     c0 = dot3(m, m) - r * r
     disc = b * b - c0
@@ -144,126 +117,180 @@ end
     return t2 > eps ? t2 : nothing
 end
 
-function nearest_sphere_hit(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    sbvh::SphereBVH;
-    eps=1e-12
+@inline function rotate3(R::SMatrix{3,3,Float64,9}, v::NTuple{3,Float64})
+    return (
+        R[1, 1] * v[1] + R[1, 2] * v[2] + R[1, 3] * v[3],
+        R[2, 1] * v[1] + R[2, 2] * v[2] + R[2, 3] * v[3],
+        R[3, 1] * v[1] + R[3, 2] * v[2] + R[3, 3] * v[3],
+    )
+end
+
+@inline function rotate3_transpose(R::SMatrix{3,3,Float64,9}, v::NTuple{3,Float64})
+    return (
+        R[1, 1] * v[1] + R[2, 1] * v[2] + R[3, 1] * v[3],
+        R[1, 2] * v[1] + R[2, 2] * v[2] + R[3, 2] * v[3],
+        R[1, 3] * v[1] + R[2, 3] * v[2] + R[3, 3] * v[3],
+    )
+end
+
+@inline function ray_polyh_intersect(
+    p::NTuple{3,Float64},
+    d::NTuple{3,Float64},
+    pbvh::PolyhedralBVH,
+    idx::Int;
+    eps::Float64=1e-12,
 )
-    P = to_mat3x1(p)
-    D = to_mat3x1(d)
-    trav = traverse_rays(sbvh.bvh, P, D)
+    c = pbvh.centres[idx]
+    c_tuple = (c[1], c[2], c[3])
+    R = pbvh.orientations[idx]
+    s = pbvh.scales[idx]
 
-    tmin = Inf
-    imin = 0
+    invs = 1.0 / s
+    p_local = mul3(rotate3_transpose(R, sub3(p, c_tuple)), invs)
+    d_local = mul3(rotate3_transpose(R, d), invs)
 
-    @inbounds for (leaf_idx, ray_idx) in trav.contacts
-        ray_idx == 1 || continue
-        c = sbvh.centres[leaf_idx]
-        r = sbvh.radii[leaf_idx]
+    t_best = Inf
+    n_local_best = (0.0, 0.0, 0.0)
+    tris = pbvh.local_tris
+    verts = pbvh.local_verts
+    normals = pbvh.local_normals
+
+    @inbounds for j in eachindex(tris)
+        i1, i2, i3 = tris[j]
+        v0 = verts[i1]
+        v1 = verts[i2]
+        v2 = verts[i3]
+        t = ray_triangle_intersect(p_local, d_local, v0, v1, v2; eps=eps)
+        t === nothing && continue
+        if t < t_best
+            t_best = t
+            n_local_best = normals[j]
+        end
+    end
+
+    isfinite(t_best) || return nothing
+
+    n_world = normalize3(rotate3(R, n_local_best))
+    return (t_best, n_world)
+end
+
+function update_nearest_sphere_hits!(
+    rb::RayBatchBuffer{Float64},
+    sbvh::SphereBVH,
+    traversal::ActiveTraversalCache;
+    eps::Float64=1e-12,
+)
+    P = rb.positions
+    D = rb.directions
+    active = rb.active
+    sphere_t = rb.sphere_t
+    sphere_idx = rb.sphere_idx
+
+    @inbounds for icontact in 1:traversal.num_contacts
+        leaf_idx, ray_idx_raw = traversal.contacts[icontact]
+        ray_idx = Int(ray_idx_raw)
+        active[ray_idx] || continue
+
+        p = (P[1, ray_idx], P[2, ray_idx], P[3, ray_idx])
+        d = (D[1, ray_idx], D[2, ray_idx], D[3, ray_idx])
+        c = sbvh.centres[Int(leaf_idx)]
+        r = sbvh.radii[Int(leaf_idx)]
         t = ray_sphere_intersect(p, d, c, r; eps=eps)
-        if t !== nothing && t < tmin
-            tmin = t
-            imin = leaf_idx
+        t === nothing && continue
+
+        tcur = sphere_t[ray_idx]
+        idxcur = sphere_idx[ray_idx]
+        if (t < tcur) || ((t == tcur) && (idxcur == 0 || Int(leaf_idx) < idxcur))
+            sphere_t[ray_idx] = t
+            sphere_idx[ray_idx] = Int(leaf_idx)
         end
     end
-
-    return imin == 0 ? nothing : (tmin, imin)
+    return nothing
 end
 
-
-function ray_polyh_intersect(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    center::SVector{3,Float64},
-    orient::SMatrix{3,3,Float64,9},
-    scale::Float64,
-    template_mesh::ParticleTriangleMesh;
-    eps=1e-12
+function update_nearest_polyh_hits!(
+    rb::RayBatchBuffer{Float64},
+    pbvh::PolyhedralBVH,
+    traversal::ActiveTraversalCache;
+    eps::Float64=1e-12,
 )
+    P = rb.positions
+    D = rb.directions
+    active = rb.active
+    polyh_t = rb.polyh_t
+    polyh_idx = rb.polyh_idx
+    polyh_nx = rb.polyh_nx
+    polyh_ny = rb.polyh_ny
+    polyh_nz = rb.polyh_nz
 
-    # Transform global ray to local object space
-    # p_local = (1/s) * R' * (p - c)
-    # d_local = R' * d
-    p_rel = p - center
-    p_local = (orient' * p_rel) * (1.0 / scale)
-    d_local = orient' * d
+    @inbounds for icontact in 1:traversal.num_contacts
+        leaf_idx_raw, ray_idx_raw = traversal.contacts[icontact]
+        ray_idx = Int(ray_idx_raw)
+        active[ray_idx] || continue
+        leaf_idx = Int(leaf_idx_raw)
 
-    # Intersect with template mesh in local space
-    V = template_mesh.vertices
-    C = template_mesh.connectivity
+        p = (P[1, ray_idx], P[2, ray_idx], P[3, ray_idx])
+        d = (D[1, ray_idx], D[2, ray_idx], D[3, ray_idx])
+        hit = ray_polyh_intersect(p, d, pbvh, leaf_idx; eps=eps)
+        hit === nothing && continue
+        t, n = hit
 
-    tmin_local = Inf
-    hit_found = false
-    n_local_min = SVector{3,Float64}(0, 0, 0)
-
-    # Brute force check against all template triangles
-    for i in 1:size(C, 2)
-        idx1, idx2, idx3 = C[1, i], C[2, i], C[3, i]
-        v0 = SVector(V[1, idx1], V[2, idx1], V[3, idx1])
-        v1 = SVector(V[1, idx2], V[2, idx2], V[3, idx2])
-        v2 = SVector(V[1, idx3], V[2, idx3], V[3, idx3])
-
-        t_loc = ray_triangle_intersect(p_local, d_local, v0, v1, v2; eps=eps)
-        if t_loc !== nothing && t_loc < tmin_local
-            tmin_local = t_loc
-            e1 = v1 - v0
-            e2 = v2 - v0
-            n_local_min = cross3(e1, e2)
-            hit_found = true
+        tcur = polyh_t[ray_idx]
+        idxcur = polyh_idx[ray_idx]
+        if (t < tcur) || ((t == tcur) && (idxcur == 0 || leaf_idx < idxcur))
+            polyh_t[ray_idx] = t
+            polyh_idx[ray_idx] = leaf_idx
+            polyh_nx[ray_idx] = n[1]
+            polyh_ny[ray_idx] = n[2]
+            polyh_nz[ray_idx] = n[3]
         end
     end
-
-    if hit_found
-        t_global = tmin_local * scale
-
-        orient_n = orient * n_local_min
-        invlen = 1.0 / sqrt(dot3(orient_n, orient_n))
-        n_global = orient_n * invlen
-
-        return t_global, n_global
-    else
-        return nothing
-    end
+    return nothing
 end
 
-function nearest_polyh_hit(
-    p::SVector{3,Float64},
-    d::SVector{3,Float64},
-    pbvh::PolyhedralBVH;
-    eps=1e-12
+function update_nearest_surface_hits!(
+    rb::RayBatchBuffer{Float64},
+    surface::SurfaceBVH,
+    traversal::ActiveTraversalCache;
+    eps::Float64=1e-12,
 )
-    P = to_mat3x1(p)
-    D = to_mat3x1(d)
+    P = rb.positions
+    D = rb.directions
+    active = rb.active
+    wall_t = rb.wall_t
+    wall_idx = rb.wall_idx
+    wall_nx = rb.wall_nx
+    wall_ny = rb.wall_ny
+    wall_nz = rb.wall_nz
+    wall_sink = rb.wall_sink
 
-    trav = traverse_rays(pbvh.bvh, P, D)
+    @inbounds for icontact in 1:traversal.num_contacts
+        leaf_idx_raw, ray_idx_raw = traversal.contacts[icontact]
+        ray_idx = Int(ray_idx_raw)
+        active[ray_idx] || continue
+        leaf_idx = Int(leaf_idx_raw)
 
-    tmin = Inf
-    imin = 0
-    nmin = SVector{3,Float64}(0, 0, 0)
+        i1, i2, i3 = surface.tris[leaf_idx]
+        v0 = surface.verts[i1]
+        v1 = surface.verts[i2]
+        v2 = surface.verts[i3]
+        p = (P[1, ray_idx], P[2, ray_idx], P[3, ray_idx])
+        d = (D[1, ray_idx], D[2, ray_idx], D[3, ray_idx])
+        t = ray_triangle_intersect(p, d, v0, v1, v2; eps=eps)
+        t === nothing && continue
 
-    template = pbvh.polyh_mesh
-
-    @inbounds for (leaf_idx, ray_idx) in trav.contacts
-        ray_idx == 1 || continue
-
-        c = pbvh.centres[leaf_idx]
-        r = pbvh.radii[leaf_idx]
-        orient = pbvh.orientations[leaf_idx]
-
-        sf = get_scale_factor(template, Float64(r))
-        res = ray_polyh_intersect(p, d, c, orient, Float64(sf), template; eps=eps / sf)
-
-        if res !== nothing
-            t, n = res
-            if t < tmin && t > eps
-                tmin = t
-                imin = leaf_idx
-                nmin = n
-            end
+        tcur = wall_t[ray_idx]
+        idxcur = wall_idx[ray_idx]
+        if (t < tcur) || ((t == tcur) && (idxcur == 0 || leaf_idx < idxcur))
+            n = triangle_unit_normal(v0, v1, v2)
+            wall_t[ray_idx] = t
+            wall_idx[ray_idx] = leaf_idx
+            wall_nx[ray_idx] = n[1]
+            wall_ny[ray_idx] = n[2]
+            wall_nz[ray_idx] = n[3]
+            wall_sink[ray_idx] = surface.kinds[leaf_idx] isa Sink
         end
     end
 
-    return imin == 0 ? nothing : (tmin, imin, nmin)
+    return nothing
 end
-

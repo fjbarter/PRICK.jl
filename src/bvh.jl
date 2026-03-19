@@ -3,22 +3,22 @@
 # ============================================================
 struct MeshBVH
     bvh::BVH
-    verts::Vector{SVector{3,Float64}}
+    verts::Vector{NTuple{3,Float64}}
     tris::Vector{NTuple{3,Int32}}
 end
 
 struct SurfaceBVH
     bvh::BVH
-    verts::Vector{SVector{3,Float64}}
+    verts::Vector{NTuple{3,Float64}}
     tris::Vector{NTuple{3,Int32}}
     kinds::Vector{SurfaceKind}
-    bbox_mins::SVector{3,Float64}
-    bbox_maxs::SVector{3,Float64}
+    bbox_mins::NTuple{3,Float64}
+    bbox_maxs::NTuple{3,Float64}
 end
 
 struct SphereBVH
     bvh::BVH
-    centres::Vector{SVector{3,Float64}}
+    centres::Vector{NTuple{3,Float64}}
     radii::Vector{Float64}
 end
 
@@ -27,25 +27,33 @@ struct PolyhedralBVH
     centres::Vector{SVector{3,Float64}}
     radii::Vector{Float64}
     orientations::Vector{SMatrix{3,3,Float64,9}}
+    scales::Vector{Float64}
+    local_verts::Vector{NTuple{3,Float64}}
+    local_tris::Vector{NTuple{3,Int32}}
+    local_normals::Vector{NTuple{3,Float64}}
     polyh_mesh::ParticleTriangleMesh
 end
 
 function build_mesh_bvh(tm::TriangleMesh)::MeshBVH
     V = tm.vertices
     C = tm.connectivity
-    verts = [SVector{3,Float64}(V[1, i], V[2, i], V[3, i]) for i in 1:size(V, 2)]
+    verts = [(V[1, i], V[2, i], V[3, i]) for i in 1:size(V, 2)]
     tris = [(Int32(C[1, j]), Int32(C[2, j]), Int32(C[3, j])) for j in 1:size(C, 2)]
 
-    tri_centres = Vector{SVector{3,Float64}}(undef, length(tris))
+    tri_centres = Vector{NTuple{3,Float64}}(undef, length(tris))
     tri_radii = Vector{Float64}(undef, length(tris))
     for (j, (i1, i2, i3)) in enumerate(tris)
         v0, v1, v2 = verts[i1], verts[i2], verts[i3]
-        c = (v0 + v1 + v2) / 3.0
+        c = (
+            (v0[1] + v1[1] + v2[1]) / 3.0,
+            (v0[2] + v1[2] + v2[2]) / 3.0,
+            (v0[3] + v1[3] + v2[3]) / 3.0,
+        )
         rtri = max(
-            sqrt(dot3(c - v0, c - v0)),
+            sqrt(dot3(sub3(c, v0), sub3(c, v0))),
             max(
-                sqrt(dot3(c - v1, c - v1)),
-                sqrt(dot3(c - v2, c - v2)),
+                sqrt(dot3(sub3(c, v1), sub3(c, v1))),
+                sqrt(dot3(sub3(c, v2), sub3(c, v2))),
             ),
         )
         tri_centres[j] = c
@@ -62,14 +70,23 @@ function build_surface_bvh(surfaces::AbstractVector{<:TriangleSurface})::Surface
 
     meshes = [s.mesh for s in surfaces]
     union_mesh = union_trianglemesh(meshes)
-    bbox_mins, bbox_maxs = compute_bounds(union_mesh)
-    center = 0.5 * (bbox_mins + bbox_maxs)
-    half = 0.5 * (bbox_maxs - bbox_mins)
-    half = 1.1 * half
-    bbox_mins = center - half
-    bbox_maxs = center + half
+    bbox_mins_raw, bbox_maxs_raw = compute_bounds(union_mesh)
+    mins = (Float64(bbox_mins_raw[1]), Float64(bbox_mins_raw[2]), Float64(bbox_mins_raw[3]))
+    maxs = (Float64(bbox_maxs_raw[1]), Float64(bbox_maxs_raw[2]), Float64(bbox_maxs_raw[3]))
+    center = (
+        0.5 * (mins[1] + maxs[1]),
+        0.5 * (mins[2] + maxs[2]),
+        0.5 * (mins[3] + maxs[3]),
+    )
+    half = (
+        0.55 * (maxs[1] - mins[1]),
+        0.55 * (maxs[2] - mins[2]),
+        0.55 * (maxs[3] - mins[3]),
+    )
+    bbox_mins = (center[1] - half[1], center[2] - half[2], center[3] - half[3])
+    bbox_maxs = (center[1] + half[1], center[2] + half[2], center[3] + half[3])
 
-    verts = Vector{SVector{3,Float64}}()
+    verts = Vector{NTuple{3,Float64}}()
     tris = Vector{NTuple{3,Int32}}()
     kinds = Vector{SurfaceKind}()
     nverts_total = 0
@@ -82,7 +99,7 @@ function build_surface_bvh(surfaces::AbstractVector{<:TriangleSurface})::Surface
         Nt = size(C, 2)
 
         @inbounds for i in 1:Nv
-            push!(verts, SVector{3,Float64}(V[1, i], V[2, i], V[3, i]))
+            push!(verts, (Float64(V[1, i]), Float64(V[2, i]), Float64(V[3, i])))
         end
 
         off = Int32(nverts_total)
@@ -94,16 +111,20 @@ function build_surface_bvh(surfaces::AbstractVector{<:TriangleSurface})::Surface
         nverts_total += Nv
     end
 
-    tri_centres = Vector{SVector{3,Float64}}(undef, length(tris))
+    tri_centres = Vector{NTuple{3,Float64}}(undef, length(tris))
     tri_radii = Vector{Float64}(undef, length(tris))
     @inbounds for (j, (i1, i2, i3)) in enumerate(tris)
         v0, v1, v2 = verts[i1], verts[i2], verts[i3]
-        c = (v0 + v1 + v2) / 3.0
+        c = (
+            (v0[1] + v1[1] + v2[1]) / 3.0,
+            (v0[2] + v1[2] + v2[2]) / 3.0,
+            (v0[3] + v1[3] + v2[3]) / 3.0,
+        )
         rtri = max(
-            sqrt(dot3(c - v0, c - v0)),
+            sqrt(dot3(sub3(c, v0), sub3(c, v0))),
             max(
-                sqrt(dot3(c - v1, c - v1)),
-                sqrt(dot3(c - v2, c - v2)),
+                sqrt(dot3(sub3(c, v1), sub3(c, v1))),
+                sqrt(dot3(sub3(c, v2), sub3(c, v2))),
             ),
         )
         tri_centres[j] = c
@@ -122,12 +143,12 @@ function build_sphere_bvh(X::AbstractMatrix{<:Real}, r::AbstractVector{<:Real}):
     n = size(X, 2)
     @assert length(r) == n "r must have length N"
 
-    centres = Vector{SVector{3,Float64}}(undef, n)
+    centres = Vector{NTuple{3,Float64}}(undef, n)
     radii = Vector{Float64}(undef, n)
     leaves = Vector{BSphere{Float64}}(undef, n)
 
     @inbounds for i in 1:n
-        c = SVector{3,Float64}(float(X[1, i]), float(X[2, i]), float(X[3, i]))
+        c = (float(X[1, i]), float(X[2, i]), float(X[3, i]))
         ri = float(r[i])
         centres[i] = c
         radii[i] = ri
@@ -155,11 +176,35 @@ function build_polyh_bvh(
     centres = Vector{SVector{3,Float64}}(undef, n)
     radii = Vector{Float64}(undef, n)
     orientations = Vector{SMatrix{3,3,Float64,9}}(undef, n)
+    scales = Vector{Float64}(undef, n)
     leaves = Vector{BBox{Float64}}(undef, n)
 
     # Pre-allocate bounds for loop efficiency
     V_local = polyh_mesh.vertices
+    C_local = polyh_mesh.connectivity
     Nv = size(V_local, 2)
+    Nt = size(C_local, 2)
+
+    local_verts = Vector{NTuple{3,Float64}}(undef, Nv)
+    @inbounds for i in 1:Nv
+        local_verts[i] = (Float64(V_local[1, i]), Float64(V_local[2, i]), Float64(V_local[3, i]))
+    end
+
+    local_tris = Vector{NTuple{3,Int32}}(undef, Nt)
+    local_normals = Vector{NTuple{3,Float64}}(undef, Nt)
+    @inbounds for j in 1:Nt
+        i1 = Int32(C_local[1, j])
+        i2 = Int32(C_local[2, j])
+        i3 = Int32(C_local[3, j])
+        local_tris[j] = (i1, i2, i3)
+
+        v0 = local_verts[i1]
+        v1 = local_verts[i2]
+        v2 = local_verts[i3]
+        nloc = cross3(sub3(v1, v0), sub3(v2, v0))
+        invn = inv(sqrt(dot3(nloc, nloc)))
+        local_normals[j] = mul3(nloc, invn)
+    end
 
     @inbounds for i in 1:n
         c = SVector{3,Float64}(float(X[1, i]), float(X[2, i]), float(X[3, i]))
@@ -172,6 +217,7 @@ function build_polyh_bvh(
         r_mat = get_rotation_matrix(view(orients, :, i), units=u"°")
         orientations[i] = r_mat
         sf = get_scale_factor(polyh_mesh, Float64(ri))
+        scales[i] = sf
 
         # Initialize bounds with the first transformed vertex
         v1 = SVector(V_local[1, 1], V_local[2, 1], V_local[3, 1])
@@ -192,5 +238,5 @@ function build_polyh_bvh(
     end
 
     bvh = BVH(leaves, BBox{Float64})
-    return PolyhedralBVH(bvh, centres, radii, orientations, polyh_mesh)
+    return PolyhedralBVH(bvh, centres, radii, orientations, scales, local_verts, local_tris, local_normals, polyh_mesh)
 end
